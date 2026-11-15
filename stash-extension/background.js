@@ -26,18 +26,92 @@ async function ensureOffscreen() {
   }
   await creating;
 }
-const toOff = async (msg) => {
-  await ensureOffscreen();
-  const r = await chrome.runtime.sendMessage({ target: 'offscreen', ...msg });
+// Store backend: this browser's offscreen document by default, or the localhost bridge
+// (server.js) when a bridge URL is configured, which is what lets browsers share files.
+let bridge = { url: '', token: '' };
+const loadBridge = async () => {
+  const s = await chrome.storage.local.get(['bridgeUrl', 'bridgeToken']);
+  bridge = { url: (s.bridgeUrl || '').replace(/\/+$/, ''), token: s.bridgeToken || '' };
+};
+let bridgeReady = loadBridge();
+
+// Auto bridge: the installed native host starts the bridge on demand and hands us its URL + token.
+// If the host isn't installed, we quietly use this browser's own memory (and retry after a minute).
+let auto = null;
+let autoFailedAt = 0;
+let autoError = ''; // why the automatic bridge isn't in use; shown in the popup
+const ensureNative = () =>
+  new Promise((res) => {
+    try {
+      chrome.runtime.sendNativeMessage('com.stash.bridge', { op: 'ensure' }, (r) => {
+        const le = chrome.runtime.lastError; // reading it also stops Chrome logging an unchecked error
+        if (le) autoError = le.message || 'native messaging failed';
+        else if (!r) autoError = 'the helper returned nothing';
+        else if (r.error) autoError = 'helper: ' + r.error;
+        else autoError = '';
+        res(r && !r.error && r.url ? r : null);
+      });
+    } catch (e) {
+      autoError = String((e && e.message) || e);
+      res(null);
+    }
+  });
+
+async function resolveStore() {
+  await bridgeReady;
+  if (bridge.url) return bridge; // a manually entered bridge wins
+  if (auto) return auto;
+  if (Date.now() - autoFailedAt < 60 * 1000) return null;
+  const r = await ensureNative();
+  if (r) return (auto = { url: r.url, token: r.token });
+  autoFailedAt = Date.now();
+  return null;
+}
+
+const toOff = async (msg, retry = true) => {
+  const b = await resolveStore();
+  let r;
+  if (b) {
+    let res;
+    try {
+      res = await fetch(b.url + '/op', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-stash-token': b.token },
+        body: JSON.stringify(msg),
+      });
+    } catch {
+      if (!bridge.url && retry) {
+        auto = null; // the bridge may have idled out: ask the host to start it again
+        autoFailedAt = 0;
+        return toOff(msg, false);
+      }
+      throw new Error('bridge unreachable (is server.js running?)');
+    }
+    if (res.status === 401) {
+      auto = null; // token changed (reinstall): re-ask the host next time
+      throw new Error('bridge rejected the token');
+    }
+    if (!res.ok) throw new Error('bridge: HTTP ' + res.status);
+    r = await res.json();
+  } else {
+    await ensureOffscreen();
+    r = await chrome.runtime.sendMessage({ target: 'offscreen', ...msg });
+  }
   if (r && r.error) throw new Error(r.error);
   return r;
 };
 
 async function refreshBadge() {
   const { armed } = await getState();
-  const n = (await toOff({ op: 'list' })).length;
-  chrome.action.setBadgeBackgroundColor({ color: armed ? '#d93025' : '#188038' });
-  chrome.action.setBadgeText({ text: armed ? 'ON' : n ? String(n) : '' });
+  let n = 0;
+  let down = false;
+  try {
+    n = (await toOff({ op: 'list' })).length;
+  } catch {
+    down = true; // bridge configured but not reachable
+  }
+  chrome.action.setBadgeBackgroundColor({ color: armed ? '#d93025' : down ? '#f0883e' : '#188038' });
+  chrome.action.setBadgeText({ text: armed ? 'ON' : down ? '!' : n ? String(n) : '' });
 }
 
 async function afterCapture() {
@@ -141,7 +215,20 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 async function handle(m) {
   switch (m.type) {
     case 'getState':
-      return getState();
+      return {
+        ...(await getState()),
+        bridge: (await resolveStore())?.url || '',
+        manual: !!bridge.url,
+        why: bridge.url ? '' : autoError,
+        extId: chrome.runtime.id,
+      };
+    case 'reloadBridge':
+      bridgeReady = loadBridge();
+      await bridgeReady;
+      auto = null;
+      autoFailedAt = 0;
+      await refreshBadge();
+      return { ok: true };
     case 'setState': {
       const patch = {};
       if ('armed' in m) patch.armed = !!m.armed;

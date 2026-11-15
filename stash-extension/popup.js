@@ -6,6 +6,18 @@ const ago = (t) => {
   return m < 1 ? 'just now' : m + 'm ago';
 };
 
+// Plain-language meaning of the errors Chrome gives for native messaging.
+function explain(why, extId) {
+  if (/not found/i.test(why))
+    return 'Helper not installed for this browser. Run the Stash installer, then fully close and reopen the browser.';
+  if (/forbidden/i.test(why))
+    return 'The browser refused the helper: this extension\'s ID (' + extId + ') does not match. Load the extension from the Stash package, not a copy.';
+  if (/exited/i.test(why))
+    return 'The helper crashed on start. Run its --logs command (see README) and check for errors.';
+  if (/^helper:/i.test(why)) return why.replace(/^helper:/i, 'The helper could not start the bridge:') + '. See its --logs.';
+  return 'Helper problem: ' + why;
+}
+
 async function drop(id, how) {
   const r = await send({ type: 'inject', id, how });
   if (r && r.error) {
@@ -22,8 +34,17 @@ async function render() {
   $('#arm').textContent = st.armed ? 'Catching... (click to stop)' : 'Catch next download';
   $('#arm').classList.toggle('on', !!st.armed);
   $('#sticky').checked = !!st.sticky;
+  $('#store').textContent = st.bridge
+    ? 'shared across browsers' + (st.manual ? ' (manual bridge)' : '')
+    : 'this browser only (bridge not installed)';
+  $('#msg').textContent = '';
+  $('#why').textContent = st.bridge || !st.why ? '' : explain(st.why, st.extId);
 
-  const list = await send({ type: 'list' });
+  let list = await send({ type: 'list' });
+  if (list && list.error) {
+    $('#msg').textContent = list.error;
+    list = [];
+  }
   const ul = $('#list');
   ul.textContent = '';
   if (!list || !list.length) {
@@ -72,6 +93,23 @@ $('#sticky').onchange = async (e) => {
 };
 $('#clear').onclick = async () => {
   await send({ type: 'clear' });
+  render();
+};
+
+chrome.storage.local.get(['bridgeUrl', 'bridgeToken']).then((s) => {
+  $('#burl').value = s.bridgeUrl || '';
+  $('#btok').value = s.bridgeToken || '';
+});
+$('#bsave').onclick = async () => {
+  await chrome.storage.local.set({ bridgeUrl: $('#burl').value.trim(), bridgeToken: $('#btok').value.trim() });
+  await send({ type: 'reloadBridge' });
+  render();
+};
+$('#boff').onclick = async () => {
+  await chrome.storage.local.remove(['bridgeUrl', 'bridgeToken']);
+  $('#burl').value = '';
+  $('#btok').value = '';
+  await send({ type: 'reloadBridge' });
   render();
 };
 

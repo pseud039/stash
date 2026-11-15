@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "Stash",
+  "version": "0.2.0",
+  "description": "In-memory file clipboard. Catch a download into RAM, drop it into any site's upload box. Nothing lands in Downloads.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "contextMenus",
+    "downloads",
+    "nativeMessaging",
+    "offscreen",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Stash",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "hook.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "util.js",
+        "content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4PBz1kcXjWYkbKc2GJeUKfp6tvrg3FdF5dWrx7x9ns0imIrxyCqBY0pn4+/49rWtbrF5+d6E1D+/YzFfZanZ2Bior5xTbU2hmkhPLZ3FFv6eZskqrWqShUd1aL9VWli6dw3sJJYqOuQbtzoNwfHJs+fVi9wa1j/S2L7FQC2Y/HxeDXSFNxRfTrXs4NVTJ8JtDks0eQ/MPcvs+hkiSVRkMLFsaA/qUWU7LK8swcEVHKaJHvsN6VPC7zaF3AjTRAFn2DyL295qmgfJ6kANnb0zMHRKiODQidaMR4LNvGXTMPsBHS5XenZC9ArEyopkXixZaqOdd1VDKLO6aSc4lfc5hwIDAQAB"
+}

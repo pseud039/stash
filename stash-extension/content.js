@@ -44,6 +44,7 @@
       else if (d.kind === 'error') toast('Stash: ' + d.message);
     } catch (err) {
       toast('Stash failed: ' + err.message);
+      if (d.kind === 'captured') toHook({ kind: 'fallback', name: d.name, blob: d.blob });
     }
   });
 

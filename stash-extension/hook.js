@@ -80,6 +80,14 @@
 
   window.addEventListener('message', (e) => {
     const d = e.data;
-    if (e.source === window && d && d.__stash === 1 && d.kind === 'armed') armed = !!d.value;
+    if (e.source !== window || !d || d.__stash !== 1) return;
+    if (d.kind === 'armed') armed = !!d.value;
+    if (d.kind === 'fallback') {
+      // stashing failed after we had already diverted the download: save it normally instead
+      const a = document.createElement('a');
+      a.href = origCreate.call(URL, d.blob);
+      a.download = d.name;
+      origClick.call(a);
+    }
   });
 })();

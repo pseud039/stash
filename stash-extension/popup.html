@@ -17,14 +17,24 @@
   #msg { min-height: 16px; color: #f0883e; }
   .hint { color: #8b949e; font-size: 11px; }
   .row { display: flex; justify-content: space-between; align-items: center; }
+  details { margin-top: 10px; color: #8b949e; }
+  details input { width: 100%; box-sizing: border-box; margin: 4px 0; padding: 4px 6px; background: #161b22; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px; font: inherit; }
 </style>
 <h1>stash</h1>
 <button id="arm">Catch next download</button>
 <label><input type="checkbox" id="sticky"> keep catching (don't disarm after one)</label>
+<div id="store" class="hint"></div>
+<div id="why" class="hint" style="color:#f0883e"></div>
 <ul id="list"></ul>
 <div id="msg"></div>
 <div class="row">
   <span class="hint">click the target spot on the page first, then Drop</span>
   <button id="clear">Clear all</button>
 </div>
+<details id="bridge">
+  <summary>bridge (share between browsers)</summary>
+  <input id="burl" placeholder="http://127.0.0.1:47821" spellcheck="false">
+  <input id="btok" type="password" placeholder="token printed by server.js" spellcheck="false">
+  <div class="row"><button id="bsave">Save</button><button id="boff">Turn off</button></div>
+</details>
 <script src="popup.js"></script>
